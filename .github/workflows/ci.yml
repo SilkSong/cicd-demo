@@ -1,13 +1,20 @@
-name: CI
+name: CI-CD demo
 
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+# Keep the workflow's default access minimal. Add permissions only when a
+# deployment actually needs them.
+permissions:
+  contents: read
 
 jobs:
   test:
+    name: Test
     runs-on: ubuntu-latest
 
     steps:
@@ -17,6 +24,49 @@ jobs:
         with:
           python-version: "3.12"
 
-      - run: pip install -r requirements.txt
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
 
-      - run: pytest
+      - name: Run tests
+        run: pytest -q
+
+  build:
+    name: Build deployable artifact
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Package the application
+        run: tar -czf app.tar.gz app.py
+
+      - name: Upload artifact for deployment
+        uses: actions/upload-artifact@v4
+        with:
+          name: hello-app
+          path: app.tar.gz
+          if-no-files-found: error
+
+  deploy-demo:
+    name: Deploy to demo environment
+    # Pull requests validate CI but never deploy. Only a push to main can
+    # reach this simulated deployment environment.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: demo
+
+    steps:
+      - name: Download the tested build
+        uses: actions/download-artifact@v4
+        with:
+          name: hello-app
+
+      - name: Simulate deployment and verify release
+        run: |
+          mkdir deployed-release
+          tar -xzf app.tar.gz -C deployed-release
+          python deployed-release/app.py
+          echo "Deployed commit $GITHUB_SHA to the demo environment" >> "$GITHUB_STEP_SUMMARY"
