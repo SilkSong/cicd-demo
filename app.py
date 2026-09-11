@@ -1,7 +1,7 @@
 # app.py
 
 def hello():
-    return "Hello CI/CD!"
+    return "Hello CI/CD! version 2"
 
 
 if __name__ == "__main__":
